@@ -1,8 +1,16 @@
 {
   "name": "shri-2020-homework-node-build-agent",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "./src/server.js",
+  "author": "Gerasin Ivan <webartmotor@gmail.com>",
   "license": "MIT",
+  "engines": {
+    "node": ">= v12.16.1"
+  },
+  "scripts": {
+    "start": "cross-env ENV=prod node ./src/server.js",
+    "dev": "cross-env ENV=dev nodemon ./src/server.js"
+  },
   "devDependencies": {
     "eslint": "^6.8.0",
     "eslint-config-prettier": "^6.10.1",
@@ -12,6 +20,15 @@
     "eslint-plugin-prettier": "^3.1.3",
     "eslint-plugin-promise": "^4.2.1",
     "eslint-plugin-standard": "^4.0.1",
+    "nodemon": "^2.0.3",
     "prettier": "^2.0.4"
+  },
+  "dependencies": {
+    "axios": "^0.19.2",
+    "body-parser": "^1.19.0",
+    "cross-env": "^7.0.2",
+    "dotenv": "^8.2.0",
+    "express": "^4.17.1",
+    "express-validator": "^6.4.0"
   }
 }
