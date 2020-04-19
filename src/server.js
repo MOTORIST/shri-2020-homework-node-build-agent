@@ -1,5 +1,4 @@
 require('dotenv').config();
-const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const rimraf = require('rimraf');
