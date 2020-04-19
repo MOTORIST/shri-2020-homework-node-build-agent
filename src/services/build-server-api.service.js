@@ -11,7 +11,7 @@ async function notifyAgent(host, port) {
 }
 
 async function notifyBuildResult(agentId, buildId, duration, buildLog, status) {
-  return axios.post('/notify-build-result', { agentId, buildId, duration, buildLog, status });
+  return httpApi.post('/notify-build-result', { agentId, buildId, duration, buildLog, status });
 }
 
 module.exports = {
