@@ -1,11 +1,12 @@
 require('dotenv').config();
+const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const rimraf = require('rimraf');
 const { exec } = require('child_process');
 const { check, validationResult } = require('express-validator');
 const app = require('./config/express');
-const { PORT, ENV, SERVER_HOST, SERVER_PORT, APP_DIR } = require('./config');
+const { PORT, ENV, APP_DIR } = require('./config');
 const buildServerApi = require('./services/build-server-api.service');
 const retry = require('./helpers/retry');
 const git = require('./helpers/git');
@@ -16,14 +17,20 @@ const sendBuildResultRetry = retry(buildServerApi.notifyBuildResult, 4, 1000, tr
 
 function clearTmpDirSync() {
   if (fs.existsSync(TMP_DIR)) {
-    rimraf.sync(TMP_DIR);
+    try {
+      rimraf.sync(TMP_DIR);
+    } catch (error) {
+      console.error('Error rm -rf tmp dir', TMP_DIR, error);
+    }
   }
 
   fs.mkdirSync(TMP_DIR);
 }
 
 function init() {
-  registerAgentRetry(SERVER_HOST, SERVER_PORT)
+  const HOST = 'http://localhost';
+
+  registerAgentRetry(HOST, PORT)
     .then(() => {
       if (ENV === 'dev') {
         console.log('--REGISTER AGENT--');
