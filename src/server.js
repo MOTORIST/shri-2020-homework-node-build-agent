@@ -1,7 +1,6 @@
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
-const rimraf = require('rimraf');
 const { exec } = require('child_process');
 const { check, validationResult } = require('express-validator');
 const app = require('./config/express');
@@ -9,29 +8,24 @@ const { PORT, HOST, ENV, APP_DIR } = require('./config');
 const buildServerApi = require('./services/build-server-api.service');
 const retry = require('./helpers/retry');
 const git = require('./helpers/git');
+const { createDir, removeDir } = require('./helpers');
 
 const TMP_DIR = path.join(APP_DIR, 'tmp');
 const registerAgentRetry = retry(buildServerApi.notifyAgent, -1, 1000);
 const sendBuildResultRetry = retry(buildServerApi.notifyBuildResult, 4, 1000, true);
+const debugMessage = (...args) => ENV === 'dev' && console.log(...args);
 
-function clearTmpDirSync() {
+async function clearTmpDir() {
   if (fs.existsSync(TMP_DIR)) {
-    try {
-      rimraf.sync(TMP_DIR);
-    } catch (error) {
-      console.error('Error rm -rf tmp dir', TMP_DIR, error);
-    }
+    await removeDir(TMP_DIR);
+    await createDir(TMP_DIR);
   }
-
-  fs.mkdirSync(TMP_DIR);
 }
 
 function init() {
   registerAgentRetry(HOST, PORT)
     .then(() => {
-      if (ENV === 'dev') {
-        console.log('--REGISTER AGENT--');
-      }
+      debugMessage('--REGISTER AGENT--');
     })
     .catch(console.error);
 }
@@ -57,13 +51,16 @@ app.post(
       return res.status(422).json({ errors: errors.array() });
     }
 
-    clearTmpDirSync();
+    try {
+      debugMessage('--START CLEANING DIRECTORY--');
+      await clearTmpDir();
+      debugMessage('--END CLEANING DIRECTORY--');
+    } catch (error) {
+      console.error('ERROR CLEAR TMP DIRECTORY', TMP_DIR, error);
+    }
 
     try {
-      if (ENV === 'dev') {
-        console.log('--GIT COMMANDS--');
-      }
-
+      debugMessage('--GIT COMMANDS--');
       await git.clone(repoName, TMP_DIR);
       await git.checkout(commitHash, TMP_DIR);
     } catch (error) {
@@ -71,17 +68,18 @@ app.post(
     }
 
     try {
-      if (ENV === 'dev') {
-        console.log('--RUN COMMAND--', buildCommand);
-      }
-
+      debugMessage('--RUN COMMAND--', buildCommand);
       const startBuild = new Date();
       // yarn install && yarn test --watchAll=false --color=always
+
       exec(buildCommand, { cwd: TMP_DIR }, async (error, stdout, stderr) => {
         const buildLog = stdout + stderr;
         const status = !error;
         const duration = new Date() - startBuild;
-        sendBuildResultRetry(agentId, id, duration, buildLog, status);
+        debugMessage('--FINISH COMMAND--', buildCommand);
+        debugMessage('--SEND BUILD RESULT TO SERVER--');
+        await sendBuildResultRetry(agentId, id, duration, buildLog, status);
+        debugMessage('--FINISH SEND BUILD RESULT TO SERVER--');
       });
     } catch (error) {
       console.log(error);
