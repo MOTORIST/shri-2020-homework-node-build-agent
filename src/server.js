@@ -5,7 +5,7 @@ const rimraf = require('rimraf');
 const { exec } = require('child_process');
 const { check, validationResult } = require('express-validator');
 const app = require('./config/express');
-const { PORT, ENV, APP_DIR } = require('./config');
+const { PORT, HOST, ENV, APP_DIR } = require('./config');
 const buildServerApi = require('./services/build-server-api.service');
 const retry = require('./helpers/retry');
 const git = require('./helpers/git');
@@ -27,8 +27,6 @@ function clearTmpDirSync() {
 }
 
 function init() {
-  const HOST = 'http://localhost';
-
   registerAgentRetry(HOST, PORT)
     .then(() => {
       if (ENV === 'dev') {
