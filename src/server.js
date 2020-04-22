@@ -1,11 +1,12 @@
 require('dotenv').config();
-const dockerCompose = require('docker-compose');
 const path = require('path');
 const { check, validationResult } = require('express-validator');
 const app = require('./config/express');
 const { PORT, HOST, ENV, CONTAINER_NAME } = require('./config');
 const buildServerApi = require('./services/build-server-api.service');
 const retry = require('./helpers/retry');
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
 
 const registerAgentRetry = retry(buildServerApi.notifyAgent, -1, 1000);
 const sendBuildResultRetry = retry(buildServerApi.notifyBuildResult, 4, 1000, true);
@@ -47,14 +48,14 @@ app.post(
 
     try {
       debugMessage('---RM CONTAINER---');
-      await dockerCompose.rm({ commandOptions: ['-s'] });
+      await exec(`docker rm -f ${CONTAINER_NAME}`);
     } catch (error) {
       console.log(`ERROR FORCE RM ${CONTAINER_NAME}`, error);
     }
 
     try {
       debugMessage('---UP CONTAINER---');
-      await dockerCompose.upAll();
+      await exec(`docker run -dt --name ${CONTAINER_NAME} -w /tmp node:12.16.2-stretch`);
     } catch (error) {
       console.log(`ERROR UP ${CONTAINER_NAME}`, error);
     }
@@ -62,18 +63,14 @@ app.post(
     try {
       debugMessage('---CLONE REPO---');
       const repo = `https://github.com/${repoName}.git`;
-      await dockerCompose.exec(CONTAINER_NAME, `git clone ${repo} ${DIR}`);
+      await exec(`docker exec ${CONTAINER_NAME} git clone ${repo} ${DIR}`);
     } catch (error) {
       console.log(`ERROR CLONE ${repoName}`, error);
     }
 
     try {
       debugMessage('---CHECKOUT---');
-      await dockerCompose.exec(CONTAINER_NAME, [
-        '/bin/bash',
-        '-c',
-        `cd ${DIR} && git checkout ${commitHash}`,
-      ]);
+      await exec(`docker exec ${CONTAINER_NAME} bash -c "cd ${DIR} && git checkout ${commitHash}"`);
     } catch (error) {
       console.log(`ERROR CHECKOUT REPO ${repoName} COMMIT HASH ${commitHash}`, error);
     }
@@ -81,17 +78,16 @@ app.post(
     try {
       debugMessage('---RUN COMMAND---');
       const startRunCommand = new Date();
-      const { out, err, exitCode } = await dockerCompose.exec(CONTAINER_NAME, [
-        '/bin/bash',
-        '-c',
-        `cd ${DIR} && ${buildCommand}`,
-      ]);
 
-      buildLog = out + err;
-      status = exitCode === 0;
+      const { stdout, stderr } = await exec(
+        `docker exec ${CONTAINER_NAME} bash -c "cd ${DIR} && ${buildCommand}"`,
+      );
+
+      buildLog = stdout + stderr;
+      status = !!stderr;
       duration = new Date() - startRunCommand;
     } catch (error) {
-      console.log(`ERROR RUN BUILD COMMAND ${buildCommand}`, error);
+      console.log(`ERROR RUN BUILD COMMAND ${buildCommand}`, error.message);
     }
 
     try {
