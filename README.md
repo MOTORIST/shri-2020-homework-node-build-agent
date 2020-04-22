@@ -25,7 +25,8 @@ cd shri-2020-homework-node-build-agent && yarn install
 rename .env.example to .env
 ```
 
-NOTE! If set ENV=dev, build server events will be displayed.
+**NOTE! If set ENV=dev, build server events will be displayed.**
+**NOTE! If you want to run command in docker container checkout to docker branch (you must install docker and docker-compose).**
 
 ## Usage <a name = "usage"></a>
 
