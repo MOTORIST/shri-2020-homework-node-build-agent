@@ -1,26 +1,15 @@
 require('dotenv').config();
+const dockerCompose = require('docker-compose');
 const path = require('path');
-const fs = require('fs');
-const { exec } = require('child_process');
 const { check, validationResult } = require('express-validator');
 const app = require('./config/express');
-const { PORT, HOST, ENV, APP_DIR } = require('./config');
+const { PORT, HOST, ENV, CONTAINER_NAME } = require('./config');
 const buildServerApi = require('./services/build-server-api.service');
 const retry = require('./helpers/retry');
-const git = require('./helpers/git');
-const { createDir, removeDir } = require('./helpers');
 
-const TMP_DIR = path.join(APP_DIR, 'tmp');
 const registerAgentRetry = retry(buildServerApi.notifyAgent, -1, 1000);
 const sendBuildResultRetry = retry(buildServerApi.notifyBuildResult, 4, 1000, true);
 const debugMessage = (...args) => ENV === 'dev' && console.log(...args);
-
-async function clearTmpDir() {
-  if (fs.existsSync(TMP_DIR)) {
-    await removeDir(TMP_DIR);
-    await createDir(TMP_DIR);
-  }
-}
 
 function init() {
   registerAgentRetry(HOST, PORT)
@@ -51,38 +40,66 @@ app.post(
       return res.status(422).json({ errors: errors.array() });
     }
 
+    const DIR = path.join('tmp', repoName);
+    let buildLog = '--EMPTY--';
+    let status = false;
+    let duration = 1;
+
     try {
-      debugMessage('--START CLEANING DIRECTORY--');
-      await clearTmpDir();
-      debugMessage('--END CLEANING DIRECTORY--');
+      debugMessage('---RM CONTAINER---');
+      await dockerCompose.rm({ commandOptions: ['-s'] });
     } catch (error) {
-      console.error('ERROR CLEAR TMP DIRECTORY', TMP_DIR, error);
+      console.log(`ERROR FORCE RM ${CONTAINER_NAME}`, error);
     }
 
     try {
-      debugMessage('--GIT COMMANDS--');
-      await git.clone(repoName, TMP_DIR);
-      await git.checkout(commitHash, TMP_DIR);
+      debugMessage('---UP CONTAINER---');
+      await dockerCompose.upAll();
     } catch (error) {
-      console.error('ERROR git', error);
+      console.log(`ERROR UP ${CONTAINER_NAME}`, error);
     }
 
     try {
-      debugMessage('--RUN COMMAND--', buildCommand);
-      const startBuild = new Date();
-      // yarn install && yarn test --watchAll=false --color=always
-
-      exec(buildCommand, { cwd: TMP_DIR }, async (error, stdout, stderr) => {
-        const buildLog = stdout + stderr;
-        const status = !error;
-        const duration = new Date() - startBuild;
-        debugMessage('--FINISH COMMAND--', buildCommand);
-        debugMessage('--SEND BUILD RESULT TO SERVER--');
-        await sendBuildResultRetry(agentId, id, duration, buildLog, status);
-        debugMessage('--FINISH SEND BUILD RESULT TO SERVER--');
-      });
+      debugMessage('---CLONE REPO---');
+      const repo = `https://github.com/${repoName}.git`;
+      await dockerCompose.exec(CONTAINER_NAME, `git clone ${repo} ${DIR}`);
     } catch (error) {
-      console.log(error);
+      console.log(`ERROR CLONE ${repoName}`, error);
+    }
+
+    try {
+      debugMessage('---CHECKOUT---');
+      await dockerCompose.exec(CONTAINER_NAME, [
+        '/bin/bash',
+        '-c',
+        `cd ${DIR} && git checkout ${commitHash}`,
+      ]);
+    } catch (error) {
+      console.log(`ERROR CHECKOUT REPO ${repoName} COMMIT HASH ${commitHash}`, error);
+    }
+
+    try {
+      debugMessage('---RUN COMMAND---');
+      const startRunCommand = new Date();
+      const { out, err, exitCode } = await dockerCompose.exec(CONTAINER_NAME, [
+        '/bin/bash',
+        '-c',
+        `cd ${DIR} && ${buildCommand}`,
+      ]);
+
+      buildLog = out + err;
+      status = exitCode === 0;
+      duration = new Date() - startRunCommand;
+    } catch (error) {
+      console.log(`ERROR RUN BUILD COMMAND ${buildCommand}`, error);
+    }
+
+    try {
+      debugMessage('---SEND RESULT---');
+      await sendBuildResultRetry(agentId, id, duration, buildLog, status);
+      debugMessage('---FINISH---');
+    } catch (error) {
+      console.log('ERROR SEND RESULT BUILD', error);
     }
 
     return res.json({ data: req.body });
