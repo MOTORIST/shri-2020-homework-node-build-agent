@@ -8,16 +8,29 @@ const retry = require('./helpers/retry');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 
-const registerAgentRetry = retry(buildServerApi.notifyAgent, -1, 1000);
 const sendBuildResultRetry = retry(buildServerApi.notifyBuildResult, 4, 1000, true);
 const debugMessage = (...args) => ENV === 'dev' && console.log(...args);
 
+async function registerAgent() {
+  debugMessage('--REGISTER AGENT---');
+
+  try {
+    buildServerApi.notifyAgent(HOST, PORT);
+  } catch (error) {
+    console.error('ERROR REGISTER AGENT', error);
+  }
+}
+
+async function registerAgentLoop() {
+  setTimeout(async () => {
+    await registerAgent();
+    registerAgentLoop();
+  }, 1 * 60 * 1000);
+}
+
 function init() {
-  registerAgentRetry(HOST, PORT)
-    .then(() => {
-      debugMessage('--REGISTER AGENT--');
-    })
-    .catch(console.error);
+  registerAgent();
+  registerAgentLoop();
 }
 
 init();
