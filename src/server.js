@@ -15,7 +15,7 @@ async function registerAgent() {
   debugMessage('--REGISTER AGENT---');
 
   try {
-    buildServerApi.notifyAgent(HOST, PORT);
+    await buildServerApi.notifyAgent(HOST, PORT);
   } catch (error) {
     console.error('ERROR REGISTER AGENT', error);
   }
