@@ -1,0 +1,8 @@
+version: '3'
+services:
+  node-to-run:
+    container_name: "node-to-run${PORT}"
+    image: "node:12.16.2-stretch"
+    working_dir: "/tmp"
+    stdin_open: true
+    tty: true
