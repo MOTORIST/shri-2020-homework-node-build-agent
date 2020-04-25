@@ -1,5 +1,23 @@
 # CI Build Agent
 
+# Принцип работы
+
+При старте:
+- агент регистрируется
+- запускатся loop регистрации агентов (если сервер упадет, то агент перерегистрирует себя)
+
+Сборка проходит в docker контейнере.
+
+Сборка:
+- удаляется старый конетйнер
+- поднимается новый
+- клонируется репозиторий
+- переключается на коммит
+- запускается команда
+- отправляется результат
+
+Для решения проблем с connect и ошибками типа 500 используется retry помощник в папке helpers.
+
 ## Table of Contents
 
 - [About](#about)
@@ -26,7 +44,6 @@ rename .env.example to .env
 ```
 
 **NOTE! If set ENV=dev, build server events will be displayed.**
-**NOTE! If you want to run command in docker container checkout to docker branch (you must install docker).**
 
 ## Usage <a name = "usage"></a>
 
